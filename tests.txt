@@ -1,0 +1,300 @@
+/* PATHFINDING A-STAR */
+
+#define INT_MAX 99999
+
+typedef struct	s_vector2D
+{
+	int				width;
+	int				height;
+}				t_vector2D;
+
+typedef struct  s_pathfind
+{
+	double			**f;
+	double			**g;
+	double			**h;
+	int				done;
+    t_vector2D      size;
+	int				**open;
+	int				**closed;
+	int				num_open;
+	int				**visited;
+}				t_pathfind;
+
+void printArray(t_pathfind *pathfind) {
+    for (int y=0; y<pathfind->size.height; y++) {
+        for (int x=0; x<pathfind->size.width; x++) {
+            printf("%c", pathfind->visited[y][x] == 1 ? 'O' : pathfind->visited[y][x] == 2 ? '.' : ' ');
+        }
+        printf("\n");
+    }
+}
+
+int* getNewCurrent(t_game *game, t_pathfind *pathfind)
+{
+	int i;
+	int	j;
+    int lowestValue;
+	static int lowest[2]= {-1, -1};
+    
+	i = -1;
+	lowestValue = INT_MAX;
+	while (++i < game->height_map)
+	{
+		j = -1;
+		while (++j < game->width_map)
+		{
+			if (pathfind->f[i][j] < lowestValue && pathfind->open[i][j] == 1) {
+                lowest[0] = i;
+                lowest[1] = j;
+                lowestValue = pathfind->f[lowest[0]][lowest[1]];
+            }
+		}
+	}
+    return (lowest);
+}
+
+void reconstruct(t_queue *queue, t_game *game)
+{
+	game->map[game->enemy_lst[0].pos.height]
+		[game->enemy_lst[0].pos.width] = '0';
+	game->enemy_lst[0].pos.height = queue->height;	
+	game->enemy_lst[0].pos.width = queue->width + 1;
+	game->map[game->enemy_lst[0].pos.height]
+		[game->enemy_lst[0].pos.width] = 'A';
+}
+
+void calculateHeuristics(t_game *game, t_pathfind *pathfind)
+{
+	int	i;
+	int	j;
+
+	i = -1;
+	while (++i < game->height_map)
+	{
+		j = -1;
+		while (++j < game->width_map)
+		{
+			pathfind->h[i][j] = sqrt(pow(game->player.pos.width - j, 2)
+				+ pow(game->player.pos.height - i, 2));
+			pathfind->f[i][j] = pathfind->g[i][j] + pathfind->h[i][j];
+		}
+	}
+}
+
+static int	**visited_move_enem(t_game *game)
+{
+	int	i;
+	int	j;
+	int	**array;
+
+	array = (int **) malloc(game->height_map * (sizeof(int *)));
+	if (array == NULL)
+		return (NULL);
+	i = -1;
+	while (++i < game->height_map)
+	{
+		j = -1;
+		array[i] = (int *) malloc(game->width_map * sizeof(int));
+		if (array[i] == NULL)
+		{
+			free_int_map(array, game->height_map);
+			return (NULL);
+		}
+		while (++j < game->width_map)
+			array[i][j] = check_pos(game, i, j);
+	}
+	return (array);
+}
+
+static void	free_double_map(double **map, int height)
+{
+	int	i;
+
+	i = -1;
+	while (++i < height)
+		free(map[i]);
+	free(map);
+}
+
+static double	**set_double_array(t_game *game)
+{
+	int	i;
+	int	j;
+	double	**array;
+
+	array = (double **) malloc(game->height_map * (sizeof(double *)));
+	if (array == NULL)
+		return (NULL);
+	i = -1;
+	while (++i < game->height_map)
+	{
+		j = -1;
+		array[i] = (double *) malloc(game->width_map * sizeof(double));
+		if (array[i] == NULL)
+		{
+			free_double_map(array, game->height_map);
+			return (NULL);
+		}
+		while (++j < game->width_map)
+			array[i][j] = 0;
+	}
+	return (array);
+}
+
+static int	**set_int_array(t_game *game)
+{
+	int	i;
+	int	j;
+	int	**array;
+
+	array = (int **) malloc(game->height_map * (sizeof(int *)));
+	if (array == NULL)
+		return (NULL);
+	i = -1;
+	while (++i < game->height_map)
+	{
+		j = -1;
+		array[i] = (int *) malloc(game->width_map * sizeof(int));
+		if (array[i] == NULL)
+		{
+			free_int_map(array, game->height_map);
+			return (NULL);
+		}
+		while (++j < game->width_map)
+			array[i][j] = 0;
+	}
+	return (array);
+}
+
+static t_queue	*get_last_point(t_queue *queue)
+{
+	t_queue	*temp;
+
+	if (!queue)
+		return (NULL);
+	while (queue)
+	{
+		temp = queue;
+		queue = queue->next;
+	}
+	return (temp);
+}
+
+static void	new_point(t_queue **queue, int height,
+            int width)
+{
+	t_queue	*new_node;
+    t_queue	*last_node;
+
+	if (queue == NULL)
+		return ;
+	new_node = (t_queue *) malloc(sizeof(t_queue));
+	if (new_node == NULL)
+		return ;
+	new_node->next = NULL;
+    new_node->height = height;
+    new_node->width = width;
+	if (*queue == NULL)
+		*queue = new_node;
+	else
+	{
+		last_node = get_last_point(*queue);
+		last_node->next = new_node;
+	}
+}
+
+static void	init_pathfind(t_game *game, t_pathfind *pathfind)
+{
+	pathfind->done = 0;
+	pathfind->num_open = 0;
+	pathfind->size = (t_vector2D){game->height_map, game->width_map};
+	pathfind->visited = visited_move_enem(game);
+	//pathfind->parent = set_parent_array(game);
+	pathfind->f = set_double_array(game);
+	pathfind->g = set_double_array(game);
+	pathfind->h = set_double_array(game);
+	calculateHeuristics(game, pathfind);
+	pathfind->open = set_int_array(game);
+	pathfind->closed = set_int_array(game);
+}
+
+static int	make_things(t_game *game, t_pathfind *pathfind)
+{
+	t_vector2D	end;
+	t_vector2D	start;
+	t_queue		*queue;
+	int			*current;
+
+	queue = NULL;
+	init_pathfind(game, pathfind);
+	end = (t_vector2D){game->player.pos.height, game->player.pos.width};
+	// change to i for multiple enemies
+	start = (t_vector2D){game->enemy_lst[0].pos.height, game->enemy_lst[0].pos.width};
+	pathfind->visited[end.height][end.width] = 2;
+    pathfind->visited[start.height][start.width] = 2;
+    pathfind->open[start.height][start.width] = 1;
+    pathfind->num_open++;
+    while (pathfind->num_open > 0 && pathfind->done == 0) {
+        current = getNewCurrent(game, pathfind);
+        if (current[0] == end.height && current[1] == end.width) {
+            pathfind->done = 1;
+			printf("DEBBUGEND\n");
+            reconstruct(queue , game);
+			return (0);
+        }
+
+        pathfind->open[current[0]][current[1]] = 0;
+        pathfind->num_open--;
+        pathfind->closed[current[0]][current[1]] = 1;
+
+        for (int y=current[0]-1; y<current[0]+2; y++) {
+            for (int x=current[1]-1; x<current[1]+2; x++) {
+                if (x < 0 || y < 0 || x > pathfind->size.width-1 || y > pathfind->size.height-1 ||
+                    abs(current[0] - y) == abs(current[1] - x) ||
+                    pathfind->closed[y][x] == 1 || pathfind->visited[y][x] == 1) {
+                    continue;
+                }
+
+                double tempG = pathfind->g[current[0]][current[1]] + 1;
+                if (pathfind->open[y][x] == 1) {
+                    if (tempG < pathfind->g[y][x]) {
+                        pathfind->g[y][x] = tempG;
+                        pathfind->f[y][x] = pathfind->g[y][x] + pathfind->h[y][x];
+						printf("DEBBUGPOINT0\n");
+						new_point(&queue, current[0], current[1]);
+                        //pathfind->parent[y][x][0] = current[0];
+                        //pathfind->parent[y][x][1] = current[1];
+                    }
+                }
+                else {
+                    pathfind->g[y][x] = tempG;
+                    pathfind->open[y][x] = 1;
+                    pathfind->num_open++;
+                    pathfind->f[y][x] = pathfind->g[y][x] + pathfind->h[y][x];
+					printf("DEBBUGPOINT1\n");
+					new_point(&queue, current[0], current[1]);
+                    //pathfind->parent[y][x][0] = current[0];
+                    //pathfind->parent[y][x][1] = current[1];
+                }
+            }
+        }
+    }
+    if (pathfind->num_open == 0 && pathfind->done == 0) {
+        pathfind->done = 1;
+        printf("\n");
+        printf("\nNo solution!\n\n");
+    }
+
+    return 0;
+}
+
+int	move_enemies(t_game *game)
+{
+	
+	t_pathfind	pathfind;
+
+	//pathfind = NULL;
+	make_things(game, &pathfind);
+	return (0);
+}
